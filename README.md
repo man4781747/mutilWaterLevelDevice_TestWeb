@@ -8,10 +8,10 @@
 
 
 **NVM使用**
-1. nvm install 18
-2. nvm use 18
-3. npm install vite@latest --save-dev
-4. npm install @vitejs/plugin-vue@latest --save-dev
-5. npm install vue@latest
-6. npm install vue-router@latest
-7. npm install vuex@latest
+nvm install 18
+nvm use 18
+npm install vite@latest --save-dev
+npm install @vitejs/plugin-vue@latest --save-dev
+npm install vue@latest
+npm install vue-router@latest
+npm install vuex@latest

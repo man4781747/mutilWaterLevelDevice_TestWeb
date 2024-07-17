@@ -1,5 +1,5 @@
 <template>
-  <div class="">
+  <div class="" style="margin: 8px;">
     <div class="container">
       <div class="row">
         <div class="col">
@@ -35,7 +35,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="(SensorData, index) of data.last3data">
-                    <td>{{(new Date(SensorData.data_time)).addHours(8).format("yyyy-MM-dd hh:mm:ss")}}</td>
+                    <td>{{(new Date(SensorData.data_time)).format("yyyy-MM-dd hh:mm:ss")}}</td>
                     <td>{{SensorData.distance_pressure}}</td>
                     <td>{{SensorData.distance_sound}}</td>
                     <td>{{SensorData.distance_radar}}</td>
@@ -51,7 +51,17 @@
     </div>
 
   </div>
-  <div class="card">
+  <div class="card" style="margin: 8px;">
+    <div class="card-body">
+      <div id="base-plot-dir"></div>
+    </div>
+  </div>
+  <div class="card" style="margin: 8px;">
+    <div class="card-body">
+      <div id="warning-plot-dir"></div>
+    </div>
+  </div>
+  <div class="card" style="margin: 8px;">
     <div class="card-body">
       <div class="container">
         <div class="row">
@@ -81,7 +91,7 @@
             </div>
           </div>
           <div class="col-1">
-            <button class="btn btn-sm btn-primary" @click="getDeviceDatas">搜尋</button>
+            <button class="btn btn-sm btn-primary" @click="getDeviceDatas();getDeviceWarning();">搜尋</button>
           </div>
           <div class="col-1">
             <button class="btn btn-sm btn-primary">下載</button>
@@ -140,6 +150,7 @@ export default {
       "end": (new Date()).format("yyyy-MM-dd"),
     },
     nowQueryData : [],
+    nowQueryWarning: [],
   }
   },
   computed:{
@@ -200,7 +211,6 @@ export default {
 
     getDeviceDatas(){
       var This = this
-      console.log(this.filters)
       fetch("http://35.206.236.245/api/data?machine_id="+this.filters.device+"&maxLimit="+this.filters.maxNum+"&startDate="+this.filters.start+"&endDate="+this.filters.end+"&reverse=true")
       .then(function (response) {
         return response.json();
@@ -208,14 +218,125 @@ export default {
       .then(function (myJson) {
         // console.log(myJson)
         This.nowQueryData = myJson["data"]
+        This.replotBaseDir()
       });
+    },
+    getDeviceWarning(){
+      var This = this
+      fetch("http://35.206.236.245/api/device_warning/"+this.filters.device+"?start_time="+this.filters.start+"&end_time="+this.filters.end)
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (myJson) {
+        console.log(myJson)
+        This.nowQueryWarning = myJson
+        This.replotWarningDir()
+      });
+    },
+    
+    replotWarningDir(){
+      var datas = {
+        created: [],
+        device_start: [],
+        iot_no_response: [],
+        iot_single_fail: [],
+        iot_upload_fail: [],
+        rtc_reset: []
+      }
+      for (let data of this.nowQueryWarning) {
+        for (let keyChose of Object.keys(datas)) {
+          datas[keyChose].push(data[keyChose])
+        }
+      }
+      console.log(datas)
+      
+      var bar_data = [];
+      
+      for (let keyChose of Object.keys(datas)) {
+        if (keyChose === "created") {continue}
+        bar_data.push({
+            x: datas["created"],
+            y: datas[keyChose],
+            name: keyChose,
+            type: 'bar',
+        })
+      }
+      var layout = {barmode: 'stack'};
+      Plotly.newPlot('warning-plot-dir', bar_data, layout);
+    },
+
+    replotBaseDir(){
+      var datas = {
+        acceleration_x: [],
+        acceleration_y: [],
+        acceleration_z: [],
+        conductivity: [],
+        data_time: [],
+        distance_pressure: [],
+        distance_radar: [],
+        distance_sound: [],
+        humidity: [],
+        temperature: [],
+        turbidity: [],
+        voltage:[]
+      }
+      for (let data of this.nowQueryData) {
+        for (let keyChose of Object.keys(datas))
+        datas[keyChose].push(data[keyChose])
+      }
+
+
+      var layout = {
+        title: '電壓/溫度/濕度',
+        xaxis: {domain: [0, 0.9]},
+        yaxis: {title: '電壓'},
+        yaxis2: {
+          title: '溫度',
+          // titlefont: {color: 'rgb(148, 103, 189)'},
+          // tickfont: {color: 'rgb(148, 103, 189)'},
+          overlaying: 'y',
+          side: 'right'
+        },
+        yaxis3: {
+          title: '濕度',
+          // titlefont: {color: 'rgb(148, 103, 189)'},
+          // tickfont: {color: 'rgb(148, 103, 189)'},
+          overlaying: 'y',
+          side: 'right',
+          anchor: 'free',
+          position: 0.975
+        },
+      }
+      var data = [
+        {
+          x: datas["data_time"],
+          y: datas["voltage"],
+          name: '電壓 (V)',
+        },
+        {
+          x: datas["data_time"],
+          y: datas["temperature"],
+          name: '溫度 (攝氏)',
+          yaxis: 'y2',
+        },
+        {
+          x: datas["data_time"],
+          y: datas["humidity"],
+          name: '濕度 (%)',
+          yaxis: 'y3',
+        },
+      ]
+      Plotly.newPlot('base-plot-dir', data, layout);
     },
   },
   mounted() {
+    window.test = this
     this.getAllDeviceInfo()
     this.getLast3Data()
     this.getDeviceWaringListInOneHour()
     this.filters.device = "-"
+    // this.replotBaseDir()
+
   },
 }
 </script>
