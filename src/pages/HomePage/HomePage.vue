@@ -149,29 +149,29 @@
               <th scope="col">資料時間</th>
               <th scope="col">電壓 (V)</th>
               <th scope="col">溫度 (攝氏)</th>
-              <th scope="col">濕度 (%)</th>
               <th scope="col">頃角x,y,z (度)</th>
-              <th scope="col">壓力 (mm)</th>
-              <th scope="col">聲波 (mm)</th>
-              <th scope="col">雷達 (mm)</th>
-              <th scope="col">濁度 (NTU)</th>
-              <th scope="col">導電 (??)</th>
+              <th scope="col">壓力式測距 (mm)</th>
+              <th scope="col">超聲波測距 (mm)</th>
+              <th scope="col">雷達波測距 (mm)</th>
+              <th scope="col">超聲波測速 (mm/s)</th>
+              <th scope="col">RS485濁度 (NTU)</th>
+              <th scope="col">RS485濁度 (mg/L)</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(SensorData, index) of nowQueryData">
-              <td>{{ SensorData.index }}</td>
+            <tr v-for="(SensorData, index) of nowQueryData.data">
+              <td>{{ index }}</td>
               <td>{{ SensorData.device }}</td>
               <td>{{(new Date(SensorData.data_time)).format("yyyy-MM-dd hh:mm:ss")}}</td>
-              <td>{{ SensorData.voltage.toFixed(1) }}</td>
-              <td>{{ SensorData.temperature.toFixed(1) }}</td>
-              <td>{{ SensorData.humidity.toFixed(1) }}</td>
-              <td>{{ SensorData.acceleration_x }},{{ SensorData.acceleration_y }},{{ SensorData.acceleration_z }}</td>
-              <td>{{ SensorData.distance_pressure }}</td>
-              <td>{{ SensorData.distance_sound }}</td>
-              <td>{{ SensorData.distance_radar }}</td>
-              <td>{{ SensorData.turbidity }}</td>
-              <td>{{ SensorData.conductivity }}</td>
+              <td>{{ SensorData.voltage?.toFixed(2) ?? '-' }}</td>
+              <td>{{ SensorData.temperature?.toFixed(2) ?? '-' }}</td>
+              <td>{{ SensorData.acceleration_x?.toFixed(2) }},{{ SensorData.acceleration_y?.toFixed(2) }},{{ SensorData.acceleration_z?.toFixed(2) }}</td>
+              <td>{{ SensorData.distance_pressure?.toFixed(2) ?? '-' }}</td>
+              <td>{{ SensorData.distance_sound?.toFixed(2) ?? '-' }}</td>
+              <td>{{ SensorData.distance_radar?.toFixed(2) ?? '-' }}</td>
+              <td>{{ SensorData.speed_radar?.toFixed(2) ?? '-' }}</td>
+              <td>{{ SensorData.turbidity_ntu?.toFixed(2) ?? '-' }}</td>
+              <td>{{ SensorData.turbidity_mg_l?.toFixed(2) ?? '-' }}</td>
             </tr>
           </tbody>
         </table>
@@ -210,6 +210,7 @@ export default {
         return response.json();
       })
       .then(function (myJson) {
+      console.log(myJson)
         for (let DeviceData of myJson) {
           if (This.DeviceInfoList[DeviceData.device] === undefined) {
             This.DeviceInfoList[DeviceData.device] = {}
@@ -334,7 +335,8 @@ export default {
         turbidity: [],
         voltage:[]
       }
-      for (let data of this.nowQueryData) {
+      console.log(this.nowQueryData)
+      for (let data of this.nowQueryData.data) {
         for (let keyChose of Object.keys(datas))
         datas[keyChose].push(data[keyChose])
       }
@@ -435,8 +437,8 @@ export default {
   mounted() {
     window.test = this
     this.getAllDeviceInfo()
-    this.getLast3Data()
-    this.getDeviceWaringListInOneHour()
+    // this.getLast3Data()
+    // this.getDeviceWaringListInOneHour()
     this.filters.device = "-"
     // this.replotBaseDir()
 
