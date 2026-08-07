@@ -7,24 +7,25 @@
       </div>
     </div>
     <div class="container-fluid">
-      <div class="row">
-        <div class="col-12 col-xl-6" v-for="(data, name, index) of DeviceInfoList" v-show="name.indexOf(filterStr) != -1">
+      <div class="row g-2">
+        <div class="col-12 col-xl-6" v-for="(name, index) of deviceList" v-show="name.indexOf(filterStr) != -1">
+        <!-- <div class="col-12 col-xl-6" v-for="(data, name, index) of DeviceInfoList" v-show="name.indexOf(filterStr) != -1"> -->
           <div class="card" style="min-width: 560px;">
             <div class="card-body">
               <h5 class="card-title">{{name}}</h5>
-              <template v-if="data['waring'] !== undefined">
+              <template v-if="DeviceInfoList[name]['waring'] !== undefined">
                 1小時內錯誤警訊: 
                 <!-- {{ data['waring'] }} -->
-                <div class="badge bg-secondary" v-if="data['waring'].device_start">重開機</div>
-                <div class="badge bg-secondary" v-if="data['waring'].rtc_reset">時鐘重設</div>
-                <div class="badge bg-secondary" v-if="data['waring'].iot_no_response">IOT模組無回應</div>
-                <div class="badge bg-secondary" v-if="data['waring'].iot_single_fail">找不到訊號</div>
-                <div class="badge bg-secondary" v-if="data['waring'].iot_upload_fail">上傳失敗</div>
+                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].device_start">重開機</div>
+                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].rtc_reset">時鐘重設</div>
+                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_no_response">IOT模組無回應</div>
+                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_single_fail">找不到訊號</div>
+                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_upload_fail">上傳失敗</div>
               </template>
-              <template v-if="data['base'] !== undefined  ">
-                <div>最新連線時間: {{(new Date(data.base.updated_at)).format("yyyy-MM-dd hh:mm:ss")}}</div>
-                <div>電壓: {{data.base.voltage}} V, 訊號強度: {{data.base.antenna_signal_strength}}</div>
-                <div>版本: {{data.base.firmware_version}}</div>
+              <template v-if="DeviceInfoList[name]['base'] !== undefined">
+                <div>最新連線時間: {{(new Date(DeviceInfoList[name].base.updated_at)).format("yyyy-MM-dd hh:mm:ss")}}</div>
+                <div>電壓: {{DeviceInfoList[name].base.voltage}} V, 訊號強度: {{DeviceInfoList[name].base.antenna_signal_strength}}</div>
+                <div>版本: {{DeviceInfoList[name].base.firmware_version}}</div>
               </template>
               <div v-else>資料讀取中</div>  
               <hr>
@@ -32,21 +33,24 @@
                 <thead>
                   <tr>
                     <th scope="col">資料時間</th>
-                    <th scope="col">壓力距離 (mm)</th>
-                    <th scope="col">聲波數值 (mm)</th>
-                    <th scope="col">雷達數值 (mm)</th>
+                    <th scope="col">壓力 (mm)</th>
+                    <th scope="col">聲波 (mm)</th>
+                    <th scope="col">雷達測距 (mm)</th>
+                    <th scope="col">雷達測速 (mm)</th>
                     <th scope="col">濁度 (NTU)</th>
-                    <th scope="col">導電 (???)</th>
+                    <th scope="col">濁度 (mg/L)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(SensorData, index) of data.last3data">
+                  
+                  <tr v-for="(SensorData, index) of DeviceInfoList[name].last3data">
                     <td style="white-space:nowrap;">{{(new Date(SensorData.data_time)).format("yyyy-MM-dd hh:mm:ss")}}</td>
-                    <td>{{SensorData.distance_pressure}}</td>
-                    <td>{{SensorData.distance_sound}}</td>
-                    <td>{{SensorData.distance_radar}}</td>
-                    <td>{{SensorData.turbidity}}</td>
-                    <td>{{SensorData.conductivity}}</td>
+                    <td>{{SensorData.distance_pressure ?? '-'}}</td>
+                    <td>{{SensorData.distance_sound ?? '-'}}</td>
+                    <td>{{SensorData.distance_radar ?? '-'}}</td>
+                    <td>{{SensorData.speed_radar ?? '-'}}</td>
+                    <td>{{SensorData.turbidity_ntu ?? '-'}}</td>
+                    <td>{{SensorData.turbidity_mg_l ?? '-'}}</td>
                   </tr>
                 </tbody>
               </table>
@@ -59,7 +63,7 @@
   </div>
   <hr style="margin: 8px 8px;">
   <div class="container-fluid" style="margin: 8px 0;">
-    <div class="row">
+    <div class="row g-2">
       <div class="col-12 col-xl-6">
         <div class="card" style="overflow: hidden;">
           <div class="card-body" style="padding:0;">
@@ -120,7 +124,7 @@
               <div class="input-group input-group-sm mb-3">
                 <select class="form-select form-select-sm" v-model="filters.device">
                   <option>-</option>
-                  <option v-for="(data, name, index) of DeviceInfoList">{{name}}</option>
+                  <option v-for="name in deviceList" :key="name">{{name}}</option>
                 </select>
               </div>
             </div>
@@ -201,16 +205,22 @@ export default {
   }
   },
   computed:{
+    deviceList(){
+      let data = Object.keys(this.DeviceInfoList).sort((a, b) => {
+        return a.localeCompare(b)
+      })
+      console.log(data) 
+      return data
+    }
   },
   methods:{
-    getAllDeviceInfo(){
+    async getAllDeviceInfo(){
       var This = this
-      fetch("http://35.206.236.245/api/device_info")
+      await fetch("http://35.206.236.245/api/device_info")
       .then(function (response) {
         return response.json();
       })
       .then(function (myJson) {
-      console.log(myJson)
         for (let DeviceData of myJson) {
           if (This.DeviceInfoList[DeviceData.device] === undefined) {
             This.DeviceInfoList[DeviceData.device] = {}
@@ -219,9 +229,9 @@ export default {
         }
       });
     },
-    getLast3Data(){
+    async getLast3Data(){
       var This = this
-      fetch("http://35.206.236.245/api/last3data")
+      await fetch("http://35.206.236.245/api/last3data")
       .then(function (response) {
         return response.json();
       })
@@ -232,15 +242,21 @@ export default {
 
         for (let data of myJson) {
           var deviceName = data.device
+          console.log(deviceName)
           if (This.DeviceInfoList[deviceName] === undefined) {
-            This.DeviceInfoList[deviceName] = {}
+            continue
+          }
+          if (This.DeviceInfoList[deviceName]["last3data"] === undefined) {
             This.DeviceInfoList[deviceName]["last3data"] = []
           }
           This.DeviceInfoList[deviceName]["last3data"].push(data)
+          This.DeviceInfoList[deviceName]["last3data"].sort((a, b) => {
+            return new Date(b.data_time) - new Date(a.data_time)
+          })
         }
       });
     },
-    getDeviceWaringListInOneHour(){
+    async getDeviceWaringListInOneHour(){
       var This = this
       fetch("http://35.206.236.245/api/device_waring_in_onehur")
       .then(function (response) {
@@ -434,11 +450,11 @@ export default {
       Plotly.newPlot(ID, data, layout);
     }
   },
-  mounted() {
+  async mounted() {
     window.test = this
-    this.getAllDeviceInfo()
-    // this.getLast3Data()
-    // this.getDeviceWaringListInOneHour()
+    await this.getAllDeviceInfo()
+    await this.getLast3Data()
+    // await this.getDeviceWaringListInOneHour()
     this.filters.device = "-"
     // this.replotBaseDir()
 
