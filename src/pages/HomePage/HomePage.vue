@@ -44,7 +44,7 @@
                 <tbody>
                   
                   <tr v-for="(SensorData, index) of DeviceInfoList[name].last3data">
-                    <td style="white-space:nowrap;">{{(new Date(SensorData.data_time)).format("yyyy-MM-dd hh:mm:ss")}}</td>
+                    <td style="white-space:nowrap;">{{new Date((new Date(SensorData.data_time)).getTime() + 8 * 60 * 60 * 1000).format("yyyy-MM-dd hh:mm:ss")}}</td>
                     <td>{{SensorData.distance_pressure ?? '-'}}</td>
                     <td>{{SensorData.distance_sound ?? '-'}}</td>
                     <td>{{SensorData.distance_radar ?? '-'}}</td>
