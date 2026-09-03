@@ -411,7 +411,6 @@ export default {
         ]
         for (let keyChose of Object.keys(datas)) {
           if (keyChose === "data_times") {
-            console.log(data)
             datas["data_times"].push(data["data_time"])
             continue
           }
@@ -444,6 +443,12 @@ export default {
       }
       var layout = {
         title: 'Error Code',
+        legend: {
+          orientation: 'h',
+          x: 0,
+          y: 1.15,
+        },
+        margin: {t: 100},
         yaxis: {
           showticklabels: false
         }
@@ -464,12 +469,17 @@ export default {
         humidity: [],
         temperature: [],
         turbidity: [],
-        voltage:[]
+        voltage:[],
+        time_diff: []
       }
       console.log(this.nowQueryData)
       for (let data of this.nowQueryData.data) {
-        for (let keyChose of Object.keys(datas))
-        datas[keyChose].push(data[keyChose])
+        for (let keyChose of Object.keys(datas)) {
+          datas[keyChose].push(data[keyChose])
+        }
+        const dataTime = new Date(data["data_time"])
+        dataTime.setSeconds(0, 0)
+        datas["time_diff"].push(new Date(data["created"]).getTime() - dataTime.getTime())
       }
       this.replotTargetDir(
         'base-plot-dir',
@@ -541,15 +551,37 @@ export default {
             y: datas["distance_radar"],
             name: '雷達波 (mm)',
           },
+          {
+            x: datas["data_time"],
+            y: datas["time_diff"].map((timeDiff) => timeDiff / 1000),
+            name: '時間差 (秒)',
+            type: 'scatter',
+            mode: 'markers',
+            marker: {color: 'red'},
+            yaxis: 'y2',
+          },
         ], 
         {
           title: '測距相關感測器',
-          yaxis: {title: ''},
+          yaxis: {title: '距離 (mm)'},
+          yaxis2: {
+            title: '時間差 (秒)',
+            overlaying: 'y',
+            side: 'right'
+          },
         }
       )
     },
     replotTargetDir(ID, data, layout) {
-      Plotly.newPlot(ID, data, layout);
+      Plotly.newPlot(ID, data, {
+        ...layout,
+        legend: {
+          orientation: 'h',
+          x: 0,
+          y: 1.15,
+        },
+        margin: {t: 100},
+      });
     }
   },
   async mounted() {
