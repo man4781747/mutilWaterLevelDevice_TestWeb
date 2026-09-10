@@ -171,7 +171,8 @@
               <th scope="col">資料時間 (+8)</th>
               <th scope="col">電壓 (V)</th>
               <th scope="col">溫度 (攝氏)</th>
-              <th scope="col">頃角x,y,z (度)</th>
+              <th scope="col">加速度x,y,z (g)</th>
+              <th scope="col">與垂直線的夾角</th>
               <th scope="col">壓力式測距 (mm)</th>
               <th scope="col">超聲波測距 (mm)</th>
               <th scope="col">雷達波測距 (mm)</th>
@@ -187,6 +188,7 @@
               <td>{{ SensorData.voltage?.toFixed(2) ?? '-' }}</td>
               <td>{{ SensorData.temperature?.toFixed(2) ?? '-' }}</td>
               <td>{{ SensorData.acceleration_x?.toFixed(2) }},{{ SensorData.acceleration_y?.toFixed(2) }},{{ SensorData.acceleration_z?.toFixed(2) }}</td>
+              <td>{{ calculateAngleWithVertical(SensorData.roll??0, SensorData.pitch??0).planeToVertical ?? '-' }}</td>
               <td>{{ SensorData.distance_pressure?.toFixed(0) ?? '-' }}</td>
               <td>{{ SensorData.distance_sound?.toFixed(0) ?? '-' }}</td>
               <td>{{ SensorData.distance_radar?.toFixed(0) ?? '-' }}</td>
@@ -232,9 +234,23 @@ export default {
       })
       console.log(data) 
       return data
-    }
+    },
   },
   methods:{
+    calculateAngleWithVertical(rollRad, pitchRad) {
+      // 計算法向量與垂直線的夾角 (總傾斜角 α)
+      const cosAlpha = Math.cos(pitchRad) * Math.cos(rollRad);
+      const alphaRad = Math.acos(cosAlpha);
+      const alphaDeg = alphaRad * (180 / Math.PI);
+
+      // 計算平面與垂直線的夾角 (β = 90 - α)
+      const planeToVerticalDeg = 90 - alphaDeg;
+
+      return {
+        tiltAngle: Number(alphaDeg.toFixed(2)),       // 平面傾斜角 (法線與垂直線夾角)
+        planeToVertical: Number(planeToVerticalDeg.toFixed(2)) // 平面本身與垂直線夾角
+      };
+    },
     async getAllDeviceInfo(){
       var This = this
       await fetch("http://35.206.236.245/api/device_info")
@@ -461,6 +477,10 @@ export default {
         acceleration_x: [],
         acceleration_y: [],
         acceleration_z: [],
+        roll: [],
+        pitch: [],
+        yaw: [],
+        planeToVertical: [],
         conductivity: [],
         data_time: [],
         distance_pressure: [],
@@ -478,9 +498,13 @@ export default {
           datas[keyChose].push(data[keyChose])
         }
         const dataTime = new Date(data["data_time"])
+        data["data_time"] = new Date(data["data_time"])
         dataTime.setSeconds(0, 0)
         datas["time_diff"].push(new Date(data["created"]).getTime() - dataTime.getTime())
+
+        datas["planeToVertical"].push(this.calculateAngleWithVertical(data.roll??0, data.pitch??0).planeToVertical)
       }
+
       this.replotTargetDir(
         'base-plot-dir',
         [
@@ -522,6 +546,12 @@ export default {
             x: datas["data_time"],
             y: datas["acceleration_z"],
             name: 'Z (度)',
+          },
+          {
+            x: datas["data_time"],
+            y: datas["planeToVertical"],
+            name: '平面與垂直線夾角 (度)',
+            yaxis: 'y2',
           },
         ], 
         {
