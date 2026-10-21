@@ -16,34 +16,15 @@
               <template v-if="DeviceInfoList[name]['waring'] !== undefined">
                 1小時內錯誤警訊: 
                 <!-- {{ data['waring'] }} -->
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].device_start">重開機</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].rtc_reset">時鐘重設</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_no_response">IOT模組無回應</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_single_fail">找不到訊號</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_upload_fail_over_max_retry">IOT上傳超過最大重試次數</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].sd_init_fail">SD卡初始化失敗</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].some_data_abandon_by_time">部分資料因時間限制捨棄</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].rebuild_error_code">重建錯誤碼</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].some_data_abandon_by_len">部分資料因長度限制捨棄</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_connect_fail">IOT連線失敗</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_set_net_setting_fail">IOT設定網路失敗</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_http_requests_fail">IOT HTTP請求失敗</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_upload_fail">上傳失敗,但重試後成功</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_disconnect_when_post_requests">POST請求時IOT中斷連線</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_600_fail">IOT 600錯誤</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_data_len_fail">IOT資料長度錯誤</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_check_sum_fail">IOT檢查碼錯誤</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_server_fail_but_pass">IOT伺服器錯誤但通過</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].iot_server_unknown_fail">IOT伺服器未知錯誤</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].tot_post_command_timeout">TOT POST命令逾時</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].tot_set_data_buffer_fail">TOT設定資料緩衝區失敗</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].tot_put_data_buffer_fail">TOT寫入資料緩衝區失敗</div>
-                <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'].tot_post_command_fail">TOT POST命令失敗</div>
-                
+                <template v-for="bit of errorCodeBits" :key="bit.name">
+                  <div class="badge bg-secondary" v-if="DeviceInfoList[name]['waring'][bit.name]" :title="bit.name">{{ bit.label }}</div>
+                </template>
+
               </template>
               <template v-if="DeviceInfoList[name]['base'] !== undefined">
                 <div>最新連線時間: {{(new Date(DeviceInfoList[name].base.updated_at)).format("yyyy-MM-dd hh:mm:ss")}}</div>
-                <div>電壓: {{DeviceInfoList[name].base.voltage}} V, 訊號強度: {{DeviceInfoList[name].base.antenna_signal_strength}}</div>
+                <div>電壓: {{DeviceInfoList[name].base.voltage}} V</div>
+                <div>訊號: RSRP {{DeviceInfoList[name].base.RSRP ?? '-'}} dBm, RSRQ {{DeviceInfoList[name].base.RSRQ ?? '-'}} dB, RSSI {{DeviceInfoList[name].base.RSSI ?? '-'}} dBm, RSSNR {{DeviceInfoList[name].base.RSSNR ?? '-'}}</div>
                 <div>版本: {{DeviceInfoList[name].base.firmware_version}}</div>
               </template>
               <div v-else>資料讀取中</div>  
@@ -207,9 +188,49 @@
 <script>
 import * as d3 from 'd3'
 
+// ErrorCode 位元定義（裝置資訊 byte 12～14 → errorcode_0～2）。
+// 名稱採韌體「ErrorCode 擴充提案」的新名稱（D-128），位置與 specs/upload-protocol.md 一致；
+// label 是實際的寫入條件。byte 14 bit 7 保留未使用，不列出。
+const ERROR_CODE_BITS = [
+  { name: 'DeviceStart',               byte: 0, mask: 0b00000001, label: '非 Timer 喚醒（重開機）' },
+  { name: 'RTC_Reset',                 byte: 0, mask: 0b00000010, label: '校時偏差超過 600 秒' },
+  { name: 'IOT_AtNoResponse',          byte: 0, mask: 0b00000100, label: '數據機無 AT 回應' },
+  { name: 'IOT_SignalFail',            byte: 0, mask: 0b00001000, label: '讀不到訊號強度' },
+  { name: 'IOT_NetFlowRetryExhausted', byte: 0, mask: 0b00010000, label: '連網流程 3 次都失敗' },
+  { name: 'SD_InitFail',               byte: 0, mask: 0b00100000, label: 'SD 卡初始化失敗' },
+  { name: 'DataAbandonByAge',          byte: 0, mask: 0b01000000, label: '資料過舊被刪除' },
+  { name: 'ErrorCodeFileRebuilt',      byte: 0, mask: 0b10000000, label: 'ErrorCode 紀錄檔重建' },
+  { name: 'DataAbandonByServerReject', byte: 1, mask: 0b00000001, label: '伺服器拒收，資料被刪除' },
+  { name: 'IOT_IpOrCpsiFail',          byte: 1, mask: 0b00000010, label: '拿不到 IP 或讀不到 CPSI' },
+  { name: 'IOT_NetRegisterFail',       byte: 1, mask: 0b00000100, label: '網路註冊或 APN 設定失敗' },
+  { name: 'IOT_HttpRetryExhausted',    byte: 1, mask: 0b00001000, label: 'HTTP 3 次都失敗，放棄上傳' },
+  { name: 'IOT_UploadAnyFail',         byte: 1, mask: 0b00010000, label: '上傳過程有失敗' },
+  { name: 'IOT_HttpInitFail',          byte: 1, mask: 0b00100000, label: 'HTTP 初始化失敗' },
+  { name: 'IOT_Modem600NotHttp',       byte: 1, mask: 0b01000000, label: '數據機回報 600' },
+  { name: 'IOT_LocalFileLenFail',      byte: 1, mask: 0b10000000, label: '待傳檔案長度錯誤' },
+  { name: 'IOT_Server598',             byte: 2, mask: 0b00000001, label: '伺服器回覆 598（校驗錯誤）' },
+  { name: 'IOT_Server599',             byte: 2, mask: 0b00000010, label: '伺服器回覆 599（長度錯誤）' },
+  { name: 'IOT_Server597',             byte: 2, mask: 0b00000100, label: '伺服器回覆 597（解析失敗）' },
+  { name: 'IOT_HttpActionTimeout',     byte: 2, mask: 0b00001000, label: 'HTTP 等不到結果' },
+  { name: 'IOT_ResponseAllocFail',     byte: 2, mask: 0b00010000, label: '回應記憶體配置失敗' },
+  { name: 'IOT_OtherFail',             byte: 2, mask: 0b00100000, label: '其他上傳失敗' },
+  { name: 'IOT_FileOpenOrMoveFail',    byte: 2, mask: 0b01000000, label: '檔案開啟或搬移失敗' },
+]
+
+/** 把 errorcode_0～2 轉成 { 位元名稱: 是否設定 }。 */
+function decodeErrorCode(data) {
+  const errorCode = [
+    Number(data.errorcode_0) || 0,
+    Number(data.errorcode_1) || 0,
+    Number(data.errorcode_2) || 0
+  ]
+  return Object.fromEntries(ERROR_CODE_BITS.map(bit => [bit.name, (errorCode[bit.byte] & bit.mask) !== 0]))
+}
+
 export default {
   data () {
     return {
+      errorCodeBits: ERROR_CODE_BITS,
       DeviceInfoList: {},
       filters: {
         "device": "",
@@ -306,36 +327,7 @@ export default {
             This.DeviceInfoList[deviceName] = {}
           }
           console.log(data)
-          const errorCode = [
-            Number(data.errorcode_0) || 0,
-            Number(data.errorcode_1) || 0,
-            Number(data.errorcode_2) || 0
-          ]
-          This.DeviceInfoList[deviceName]["waring"] = {
-            device_start: Boolean(errorCode[0] & 0b00000001),
-            rtc_reset: Boolean(errorCode[0] & 0b00000010),
-            iot_no_response: Boolean(errorCode[0] & 0b00000100),
-            iot_single_fail: Boolean(errorCode[0] & 0b00001000),
-            iot_upload_fail_over_max_retry: Boolean(errorCode[0] & 0b00010000),
-            sd_init_fail: Boolean(errorCode[0] & 0b00100000),
-            some_data_abandon_by_time: Boolean(errorCode[0] & 0b01000000),
-            rebuild_error_code: Boolean(errorCode[0] & 0b10000000),
-            some_data_abandon_by_len: Boolean(errorCode[1] & 0b00000001),
-            iot_connect_fail: Boolean(errorCode[1] & 0b00000010),
-            iot_set_net_setting_fail: Boolean(errorCode[1] & 0b00000100),
-            iot_http_requests_fail: Boolean(errorCode[1] & 0b00001000),
-            iot_upload_fail: Boolean(errorCode[1] & 0b00010000),
-            iot_disconnect_when_post_requests: Boolean(errorCode[1] & 0b00100000),
-            iot_600_fail: Boolean(errorCode[1] & 0b01000000),
-            iot_data_len_fail: Boolean(errorCode[1] & 0b10000000),
-            iot_check_sum_fail: Boolean(errorCode[2] & 0b00000001),
-            iot_server_fail_but_pass: Boolean(errorCode[2] & 0b00000010),
-            iot_server_unknown_fail: Boolean(errorCode[2] & 0b00000100),
-            tot_post_command_timeout: Boolean(errorCode[2] & 0b00001000),
-            tot_set_data_buffer_fail: Boolean(errorCode[2] & 0b00010000),
-            tot_put_data_buffer_fail: Boolean(errorCode[2] & 0b00100000),
-            tot_post_command_fail: Boolean(errorCode[2] & 0b01000000)
-          }
+          This.DeviceInfoList[deviceName]["waring"] = decodeErrorCode(data)
         }
       });
     },
@@ -369,76 +361,21 @@ export default {
     },
     
     replotWarningDir(){
-      const warningMasks = {
-        device_start: [0, 0b00000001, 1],
-        rtc_reset: [0, 0b00000010, 2],
-        iot_no_response: [0, 0b00000100, 3],
-        iot_single_fail: [0, 0b00001000, 4],
-        iot_upload_fail_over_max_retry: [0, 0b00010000, 5],
-        sd_init_fail: [0, 0b00100000, 6],
-        some_data_abandon_by_time: [0, 0b01000000, 7],
-        rebuild_error_code: [0, 0b10000000, 8],
-        some_data_abandon_by_len: [1, 0b00000001, 9],
-        iot_connect_fail: [1, 0b00000010, 10],
-        iot_set_net_setting_fail: [1, 0b00000100, 11],
-        iot_http_requests_fail: [1, 0b00001000, 12],
-        iot_upload_fail: [1, 0b00010000, 13],
-        iot_disconnect_when_post_requests: [1, 0b00100000, 14],
-        iot_600_fail: [1, 0b01000000, 15],
-        iot_data_len_fail: [1, 0b10000000, 16],
-        iot_check_sum_fail: [2, 0b00000001, 17],
-        iot_server_fail_but_pass: [2, 0b00000010, 18],
-        iot_server_unknown_fail: [2, 0b00000100, 19],
-        tot_post_command_timeout: [2, 0b00001000, 20],
-        tot_set_data_buffer_fail: [2, 0b00010000, 21],
-        tot_put_data_buffer_fail: [2, 0b00100000, 22],
-        tot_post_command_fail: [2, 0b01000000, 23]
-      }
-      var datas = {
-        data_times: [],
-        device_start: [],
-        rtc_reset: [],
-        iot_no_response: [],
-        iot_single_fail: [],
-        iot_upload_fail_over_max_retry: [],
-        sd_init_fail: [],
-        some_data_abandon_by_time: [],
-        rebuild_error_code: [],
-        some_data_abandon_by_len: [],
-        iot_connect_fail: [],
-        iot_set_net_setting_fail: [],
-        iot_http_requests_fail: [],
-        iot_upload_fail: [],
-        iot_disconnect_when_post_requests: [],
-        iot_600_fail: [],
-        iot_data_len_fail: [],
-        iot_check_sum_fail: [],
-        iot_server_fail_but_pass: [],
-        iot_server_unknown_fail: [],
-        tot_post_command_timeout: [],
-        tot_set_data_buffer_fail: [],
-        tot_put_data_buffer_fail: [],
-        tot_post_command_fail: []
+      // 每個位元畫成一條：y 值是該位元在 ERROR_CODE_BITS 中的序號（1 起），未設定為 0（之後濾掉）
+      var datas = { data_times: [] }
+      for (let bit of ERROR_CODE_BITS) {
+        datas[bit.name] = []
       }
       const warningList = Array.isArray(this.nowQueryWarning)
         ? this.nowQueryWarning
         : []
       console.log(warningList)
       for (let data of warningList) {
-        const errorCode = [
-          Number(data.errorcode_0) || 0,
-          Number(data.errorcode_1) || 0,
-          Number(data.errorcode_2) || 0
-        ]
-        for (let keyChose of Object.keys(datas)) {
-          if (keyChose === "data_times") {
-            datas["data_times"].push(data["data_time"])
-            continue
-          }
-          const [codeIndex, mask, type] = warningMasks[keyChose]
-          const isSet = (errorCode[codeIndex] & mask) !== 0
-          datas[keyChose].push(isSet ? type : 0)
-        }
+        const flags = decodeErrorCode(data)
+        datas["data_times"].push(data["data_time"])
+        ERROR_CODE_BITS.forEach((bit, index) => {
+          datas[bit.name].push(flags[bit.name] ? index + 1 : 0)
+        })
       }
       
       var bar_data = [];
