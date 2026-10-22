@@ -24,7 +24,7 @@
               <template v-if="DeviceInfoList[name]['base'] !== undefined">
                 <div>最新連線時間: {{(new Date(DeviceInfoList[name].base.updated_at)).format("yyyy-MM-dd hh:mm:ss")}}</div>
                 <div>電壓: {{DeviceInfoList[name].base.voltage}} V</div>
-                <div>訊號: RSRP {{DeviceInfoList[name].base.RSRP ?? '-'}} dBm, RSRQ {{DeviceInfoList[name].base.RSRQ ?? '-'}} dB, RSSI {{DeviceInfoList[name].base.RSSI ?? '-'}} dBm, RSSNR {{DeviceInfoList[name].base.RSSNR ?? '-'}}</div>
+                <div>訊號: RSRP {{DeviceInfoList[name].base.RSRP ?? '-'}} dBm, RSRQ {{DeviceInfoList[name].base.RSRQ ?? '-'}} dB, RSSI {{DeviceInfoList[name].base.RSSI ?? '-'}} dBm, RSSNR {{DeviceInfoList[name].base.RSSNR ?? '-'}} dB</div>
                 <div>版本: {{DeviceInfoList[name].base.firmware_version}}</div>
               </template>
               <div v-else>資料讀取中</div>  
@@ -188,21 +188,23 @@
 <script>
 import * as d3 from 'd3'
 
-// ErrorCode 位元定義（裝置資訊 byte 12～14 → errorcode_0～2）。
-// 名稱採韌體「ErrorCode 擴充提案」的新名稱（D-128），位置與 specs/upload-protocol.md 一致；
-// label 是實際的寫入條件。byte 14 bit 7 保留未使用，不列出。
+// ErrorCode 位元定義（裝置資訊 byte 12～17 → errorcode_0～5）。
+// 名稱採韌體「ErrorCode 擴充提案」的新名稱（D-128），位置與 specs/error-code.md 一致；
+// label 是實際的寫入條件，要同時符合韌體 0.0.x 與 0.1.0。
+// byte 15～17（errorcode_3～5）是韌體 0.1.0 起的新位元，舊韌體一律為 0。
+// 不列出：保留位元（byte 14 bit 7、byte 17 bit 5～7、byte 18）、沒有寫入點的 SleepBoundarySkipped（byte 17 bit 0）。
 const ERROR_CODE_BITS = [
   { name: 'DeviceStart',               byte: 0, mask: 0b00000001, label: '非 Timer 喚醒（重開機）' },
   { name: 'RTC_Reset',                 byte: 0, mask: 0b00000010, label: '校時偏差超過 600 秒' },
   { name: 'IOT_AtNoResponse',          byte: 0, mask: 0b00000100, label: '數據機無 AT 回應' },
   { name: 'IOT_SignalFail',            byte: 0, mask: 0b00001000, label: '讀不到訊號強度' },
-  { name: 'IOT_NetFlowRetryExhausted', byte: 0, mask: 0b00010000, label: '連網流程 3 次都失敗' },
-  { name: 'SD_InitFail',               byte: 0, mask: 0b00100000, label: 'SD 卡初始化失敗' },
-  { name: 'DataAbandonByAge',          byte: 0, mask: 0b01000000, label: '資料過舊被刪除' },
+  { name: 'IOT_NetFlowRetryExhausted', byte: 0, mask: 0b00010000, label: '連網流程 3 次都失敗，沒有送出資料' },
+  { name: 'SD_InitFail',               byte: 0, mask: 0b00100000, label: '開機時 SD 卡初始化失敗' },
+  { name: 'DataAbandonByAge',          byte: 0, mask: 0b01000000, label: '待傳資料過舊或過多，被刪除' },
   { name: 'ErrorCodeFileRebuilt',      byte: 0, mask: 0b10000000, label: 'ErrorCode 紀錄檔重建' },
-  { name: 'DataAbandonByServerReject', byte: 1, mask: 0b00000001, label: '伺服器拒收，資料被刪除' },
+  { name: 'DataAbandonByServerReject', byte: 1, mask: 0b00000001, label: '伺服器多次拒收，資料被刪除' },
   { name: 'IOT_IpOrCpsiFail',          byte: 1, mask: 0b00000010, label: '拿不到 IP 或讀不到 CPSI' },
-  { name: 'IOT_NetRegisterFail',       byte: 1, mask: 0b00000100, label: '網路註冊或 APN 設定失敗' },
+  { name: 'IOT_NetRegisterFail',       byte: 1, mask: 0b00000100, label: '網路註冊、APN 設定或 GPS 失敗' },
   { name: 'IOT_HttpRetryExhausted',    byte: 1, mask: 0b00001000, label: 'HTTP 3 次都失敗，放棄上傳' },
   { name: 'IOT_UploadAnyFail',         byte: 1, mask: 0b00010000, label: '上傳過程有失敗' },
   { name: 'IOT_HttpInitFail',          byte: 1, mask: 0b00100000, label: 'HTTP 初始化失敗' },
@@ -215,15 +217,31 @@ const ERROR_CODE_BITS = [
   { name: 'IOT_ResponseAllocFail',     byte: 2, mask: 0b00010000, label: '回應記憶體配置失敗' },
   { name: 'IOT_OtherFail',             byte: 2, mask: 0b00100000, label: '其他上傳失敗' },
   { name: 'IOT_FileOpenOrMoveFail',    byte: 2, mask: 0b01000000, label: '檔案開啟或搬移失敗' },
+  { name: 'SD_RuntimeWriteFail',       byte: 3, mask: 0b00000001, label: '清醒中 SD 寫入失敗' },
+  { name: 'SD_DegradedMode',           byte: 3, mask: 0b00000010, label: 'SD 降級模式（資料暫存 LittleFS）' },
+  { name: 'WakeTimeLimitHit',          byte: 3, mask: 0b00000100, label: '清醒時間到期，強制休眠' },
+  { name: 'SubtaskTimeout',            byte: 3, mask: 0b00001000, label: '採樣或感測工作逾時' },
+  { name: 'RTC_Untrusted',             byte: 3, mask: 0b00010000, label: '開機時 RTC 時間不可信' },
+  { name: 'RestartDegraded',           byte: 3, mask: 0b00100000, label: '連續異常重啟，降級運作' },
+  { name: 'TaskCreateFail',            byte: 3, mask: 0b01000000, label: '工作建立失敗（記憶體不足）' },
+  { name: 'TempFileCleaned',           byte: 3, mask: 0b10000000, label: '清除上次中斷的暫存檔' },
+  { name: 'GPS_CommandFail',           byte: 4, mask: 0b00000001, label: 'GPS 啟動指令失敗' },
+  { name: 'GPS_Timeout',               byte: 4, mask: 0b00000010, label: 'GPS 10 分鐘定不到' },
+  { name: 'GPS_ManualSkip',            byte: 4, mask: 0b00000100, label: 'GPS 定位被手動略過' },
+  { name: 'ServerTimeRejected',        byte: 4, mask: 0b00001000, label: '伺服器時間不合理，沒有校時' },
+  { name: 'ModemNetworkError',         byte: 4, mask: 0b00010000, label: '數據機回報 601（網路錯誤）' },
+  { name: 'UploadRetryExhausted',      byte: 4, mask: 0b00100000, label: '3 次上傳都失敗，資料留到下次' },
+  { name: 'ConfigFieldDefaulted',      byte: 4, mask: 0b01000000, label: '設定檔欄位改用預設值' },
+  { name: 'ConfigWriteFail',           byte: 4, mask: 0b10000000, label: '設定檔寫入失敗' },
+  { name: 'ModemDnsError',             byte: 5, mask: 0b00000010, label: '數據機回報 603（DNS 錯誤）' },
+  { name: 'PreopenAbandoned',          byte: 5, mask: 0b00000100, label: '放棄濁度預開' },
+  { name: 'SleepCountdownCapped',      byte: 5, mask: 0b00001000, label: '休眠倒數超過上限，被截短' },
+  { name: 'ForcedKillInLock',          byte: 5, mask: 0b00010000, label: '強制結束持鎖中的工作' },
 ]
 
-/** 把 errorcode_0～2 轉成 { 位元名稱: 是否設定 }。 */
+/** 把 errorcode_0～5 轉成 { 位元名稱: 是否設定 }。API 沒有回傳的 byte 當作 0。 */
 function decodeErrorCode(data) {
-  const errorCode = [
-    Number(data.errorcode_0) || 0,
-    Number(data.errorcode_1) || 0,
-    Number(data.errorcode_2) || 0
-  ]
+  const errorCode = [0, 1, 2, 3, 4, 5].map(i => Number(data['errorcode_' + i]) || 0)
   return Object.fromEntries(ERROR_CODE_BITS.map(bit => [bit.name, (errorCode[bit.byte] & bit.mask) !== 0]))
 }
 

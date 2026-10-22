@@ -13,7 +13,7 @@
   - `/api/data`、`/api/device_warning/<device>`
 - API 的伺服器位址目前寫死在 `src/pages/HomePage/HomePage.vue`。
 - 介面以 `../../specs/cloud-api.md` 為準。
-- ErrorCode 位元只在 `HomePage.vue` 的 `ERROR_CODE_BITS` 定義一次，名稱採韌體擴充提案的新名稱（D-128，位元定義在 `../../specs/error-code.md`）。韌體 0.1.0 起 ErrorCode 是 7 bytes，但 DB 目前只存前 3 bytes（meta repo BACKLOG B-04）。不要在其他地方重複定義位元。
+- ErrorCode 位元只在 `HomePage.vue` 的 `ERROR_CODE_BITS` 定義一次，名稱採韌體擴充提案的新名稱（D-128，位元定義在 `../../specs/error-code.md`）。韌體 0.1.0 起 ErrorCode 是 7 bytes，API 回傳 `errorcode_0..6`，畫面列出 byte 12～17 有寫入點的位元（B-04）；API 沒有回傳的 byte 當作 0。label 要同時符合韌體 0.0.x 與 0.1.0 的條件。不要在其他地方重複定義位元。
 
 ## 建置
 
