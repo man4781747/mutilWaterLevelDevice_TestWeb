@@ -237,6 +237,7 @@ const ERROR_CODE_BITS = [
   { name: 'PreopenAbandoned',          byte: 5, mask: 0b00000100, label: '放棄濁度預開' },
   { name: 'SleepCountdownCapped',      byte: 5, mask: 0b00001000, label: '休眠倒數超過上限，被截短' },
   { name: 'ForcedKillInLock',          byte: 5, mask: 0b00010000, label: '強制結束持鎖中的工作' },
+  { name: 'DataAbandonByBufferFull',   byte: 5, mask: 0b00100000, label: 'SD 失效期間暫存超過 20 筆，刪除最舊資料' },
 ]
 
 /** 把 errorcode_0～5 轉成 { 位元名稱: 是否設定 }。API 沒有回傳的 byte 當作 0。 */
