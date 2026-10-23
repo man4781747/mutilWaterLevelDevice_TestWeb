@@ -1,28 +1,9 @@
-<script setup>
-</script>
-
 <template>
-  <div class="">
-    <router-view/>
-  </div>
+  <router-view/>
 </template>
 
 <script>
 export default {
   name: 'App',
-  components: {
-  },
-  data() {
-    return {
-    }
-  },
-  computed: {
-  },
-  methods: {
-  
-  },
-  mounted(){
-  
-  }
 }
 </script>

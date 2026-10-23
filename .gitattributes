@@ -1,0 +1,2 @@
+# shell script 在 VM（Linux）上執行，一律用 LF，避免在 Windows 上 commit 成 CRLF 後 bash 無法執行
+*.sh text eol=lf

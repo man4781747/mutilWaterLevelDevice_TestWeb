@@ -1,0 +1,65 @@
+# build 後經 IAP 通道把網頁部署到 GCP VM（設定步驟見 deploy/README.md）
+# 本 repo 是公開的：專案、VM、路徑等資訊一律放在 Secrets，不寫在這裡（Secrets 在 log 中會被遮蔽）
+name: 部署到 GCP VM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # Workload Identity Federation 換 GCP 短期憑證用
+
+# 同時只跑一個部署，後來的排隊，不中斷正在部署的
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ secrets.GCP_ZONE }}
+      GCP_VM_NAME: ${{ secrets.GCP_VM_NAME }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      REMOTE_ARCHIVE: /tmp/cloud-web-dist-${{ github.run_id }}.tar.gz
+      REMOTE_SCRIPT: /tmp/cloud-web-deploy-${{ github.run_id }}.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: 安裝套件
+        run: npm ci
+
+      - name: 編譯
+        run: npm run build
+
+      - name: 打包
+        run: tar -czf cloud-web-dist.tar.gz -C dist .
+
+      - name: 登入 GCP（Workload Identity Federation）
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: 上傳到 VM
+        run: |
+          gcloud compute scp cloud-web-dist.tar.gz "$GCP_VM_NAME:$REMOTE_ARCHIVE" \
+            --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" --tunnel-through-iap --quiet
+          gcloud compute scp deploy/remote-deploy.sh "$GCP_VM_NAME:$REMOTE_SCRIPT" \
+            --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" --tunnel-through-iap --quiet
+
+      - name: 換上新版
+        run: |
+          gcloud compute ssh "$GCP_VM_NAME" \
+            --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" --tunnel-through-iap --quiet \
+            --command "bash '$REMOTE_SCRIPT' '$REMOTE_ARCHIVE' '$DEPLOY_PATH'; status=\$?; rm -f '$REMOTE_SCRIPT'; exit \$status"

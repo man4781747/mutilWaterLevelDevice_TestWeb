@@ -19,8 +19,9 @@
 
 - `npm install`、`npm run dev`、`npm run build`（Node 18，見 README）。
 - build 的輸出路徑為 `static/indexPath/...`（`vite.config.js`）。
-- 部署：手動。跑在 GCP VM 上，與 api-service 在同一台（R-12）。
-  - 推測：build 的產物放進 `repos/api-service` 的 `Nginx/static/` 與 `Nginx/templates/`，由同一個 Nginx 提供（路徑與 `static/indexPath/` 相符）。這點尚未確認。
+- 部署：跑在 GCP VM 上，與 api-service 在同一台（R-12）。
+  - build 的產物放進 api-service 的 `Nginx/templates/`（`index.html`、`favicon.ico`）與 `Nginx/static/`（`indexPath/`），由同一個 Nginx 提供；兩個資料夾由 api-service 的 docker-compose 掛進 Nginx 容器，換檔案不用重啟（對照 `repos/api-service/docker-compose.yml`、`Nginx/nginx/conf.d/default.conf`）。
+  - 自動部署：`.github/workflows/deploy.yml`，push 到 `main` 時 build 並經 IAP 通道傳到 VM，VM 上執行 `deploy/remote-deploy.sh`。一次性設定（GCP 服務帳號、Workload Identity Federation、GitHub Secrets）見 `deploy/README.md`。專案、VM、路徑只放在 GitHub Secrets，不要寫進 repo。
 
 ## 結構
 
