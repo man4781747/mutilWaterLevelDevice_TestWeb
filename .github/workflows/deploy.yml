@@ -1,5 +1,5 @@
-# build 後經 IAP 通道把網頁部署到 GCP VM（設定步驟見 deploy/README.md）
-# 本 repo 是公開的：專案、VM、路徑等資訊一律放在 Secrets，不寫在這裡（Secrets 在 log 中會被遮蔽）
+# build 後經 IAP 通道，以部署專用的 SSH 金鑰把網頁部署到 GCP VM（設定步驟見 deploy/README.md）
+# 本 repo 是公開的：專案、VM、路徑、金鑰等資訊一律放在 Secrets，不寫在這裡（Secrets 在 log 中會被遮蔽）
 name: 部署到 GCP VM
 
 on:
@@ -24,6 +24,8 @@ jobs:
       GCP_ZONE: ${{ secrets.GCP_ZONE }}
       GCP_VM_NAME: ${{ secrets.GCP_VM_NAME }}
       DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+      TUNNEL_PORT: 2222
       REMOTE_ARCHIVE: /tmp/cloud-web-dist-${{ github.run_id }}.tar.gz
       REMOTE_SCRIPT: /tmp/cloud-web-deploy-${{ github.run_id }}.sh
     steps:
@@ -51,15 +53,44 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: 準備 SSH 金鑰
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: 開啟 IAP 通道
+        run: |
+          gcloud compute start-iap-tunnel "$GCP_VM_NAME" 22 \
+            --local-host-port "localhost:$TUNNEL_PORT" \
+            --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" > iap-tunnel.log 2>&1 &
+          # 等通道可以連線，最多 30 秒
+          for i in $(seq 1 30); do
+            if nc -z localhost "$TUNNEL_PORT"; then
+              echo "IAP 通道已開啟"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "IAP 通道 30 秒內沒有開啟" >&2
+          cat iap-tunnel.log >&2
+          exit 1
+
+      # 經 IAP 通道連線前，Google 已驗證過服務帳號與目標 VM，所以不另外核對 host key
       - name: 上傳到 VM
         run: |
-          gcloud compute scp cloud-web-dist.tar.gz "$GCP_VM_NAME:$REMOTE_ARCHIVE" \
-            --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" --tunnel-through-iap --quiet
-          gcloud compute scp deploy/remote-deploy.sh "$GCP_VM_NAME:$REMOTE_SCRIPT" \
-            --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" --tunnel-through-iap --quiet
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+          scp $SSH_OPTS -P "$TUNNEL_PORT" cloud-web-dist.tar.gz "$DEPLOY_SSH_USER@localhost:$REMOTE_ARCHIVE"
+          scp $SSH_OPTS -P "$TUNNEL_PORT" deploy/remote-deploy.sh "$DEPLOY_SSH_USER@localhost:$REMOTE_SCRIPT"
 
       - name: 換上新版
         run: |
-          gcloud compute ssh "$GCP_VM_NAME" \
-            --project "$GCP_PROJECT_ID" --zone "$GCP_ZONE" --tunnel-through-iap --quiet \
-            --command "bash '$REMOTE_SCRIPT' '$REMOTE_ARCHIVE' '$DEPLOY_PATH'; status=\$?; rm -f '$REMOTE_SCRIPT'; exit \$status"
+          SSH_OPTS="-i $HOME/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+          ssh $SSH_OPTS -p "$TUNNEL_PORT" "$DEPLOY_SSH_USER@localhost" \
+            "bash '$REMOTE_SCRIPT' '$REMOTE_ARCHIVE' '$DEPLOY_PATH'; status=\$?; rm -f '$REMOTE_SCRIPT'; exit \$status"
+
+      - name: 清除金鑰
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
