@@ -11,13 +11,14 @@
 - 呼叫 `repos/api-service` 的 HTTP API（⑤，`specs/cloud-api.md`）：
   - `/api/device_info`、`/api/last3data`、`/api/device_waring_in_onehour`
   - `/api/data`、`/api/device_warning/<device>`
-- API 的伺服器位址目前寫死在 `src/pages/HomePage/HomePage.vue`。
+- API 以同網域的相對路徑 `/api/...` 呼叫（網頁與 API 由同一個 Nginx 以 https 提供），不寫死伺服器位址。
 - 介面以 `../../specs/cloud-api.md` 為準。
 - ErrorCode 位元只在 `HomePage.vue` 的 `ERROR_CODE_BITS` 定義一次，名稱採韌體擴充提案的新名稱（D-128，位元定義在 `../../specs/error-code.md`）。韌體 0.1.0 起 ErrorCode 是 7 bytes，API 回傳 `errorcode_0..6`，畫面列出 byte 12～17 有寫入點的位元（B-04）；API 沒有回傳的 byte 當作 0。label 要同時符合韌體 0.0.x 與 0.1.0 的條件。不要在其他地方重複定義位元。
 
 ## 建置
 
 - `npm install`、`npm run dev`、`npm run build`（Node 18，見 README）。
+- `npm run dev` 的 `/api` proxy 目標讀 `API_PROXY_TARGET`（`vite.config.js`）：預設值在 `.env.development`（進版控），個人覆寫寫在 `.env.local`（不進版控）。
 - build 的輸出路徑為 `static/indexPath/...`（`vite.config.js`）。
 - 部署：跑在 GCP VM 上，與 api-service 在同一台（R-12）。
   - build 的產物放進 api-service 的 `Nginx/templates/`（`index.html`、`favicon.ico`）與 `Nginx/static/`（`indexPath/`），由同一個 Nginx 提供；兩個資料夾由 api-service 的 docker-compose 掛進 Nginx 容器，換檔案不用重啟（對照 `repos/api-service/docker-compose.yml`、`Nginx/nginx/conf.d/default.conf`）。

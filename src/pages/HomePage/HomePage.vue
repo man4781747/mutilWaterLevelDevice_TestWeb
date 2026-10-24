@@ -354,11 +354,9 @@ function validNumber(value) {
   return n
 }
 
-const API_BASE = 'http://35.206.236.245'
-
-/** fetch JSON；HTTP 狀態不是 2xx 時丟出錯誤 */
+/** fetch JSON（同網域的相對路徑）；HTTP 狀態不是 2xx 時丟出錯誤 */
 async function fetchJson(path) {
-  const response = await fetch(API_BASE + path)
+  const response = await fetch(path)
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`)
   }
